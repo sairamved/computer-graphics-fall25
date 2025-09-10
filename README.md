@@ -1,1 +1,1 @@
-# computer-graphics-fall25
+# Computer Graphics Fall 25
