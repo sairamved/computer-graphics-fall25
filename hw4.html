@@ -1,0 +1,90 @@
+<html
+<head><title>Wood Shader</title></head>
+<body bgcolor=black>
+<center><canvas id=canvas width=800 height=800></canvas>
+<script src=webgl.js></script>
+<script>
+
+// WOOD
+function Scene() {
+
+this.vertexShader = `\
+#version 300 es
+in  vec3 aPos;
+out vec3 vPos;
+void main() {
+   gl_Position = vec4(aPos, 1.);
+   vPos = aPos;
+}`;
+
+this.fragmentShader = `\
+#version 300 es
+precision highp float;
+uniform float uTime;
+uniform vec3 uViewPoint;
+in  vec3 vPos;
+out vec4 fragColor;
+
+float turbulence(vec3 P) {
+   float f = 0., s = 1.;
+   for (int i = 0 ; i < 9 ; i++) {
+      f += abs(noise(s * P)) / s;
+      s *= 2.;
+      P = vec3(.866*P.x + .5*P.z, P.y + 100., -.5*P.x + .866*P.z);
+   }
+   return f;
+}
+
+
+vec3 water(vec3 pos) {
+   float t = uTime;
+   pos.y += 0.2 * turbulence(0.6 * pos + t * 0.2);
+   float band = 0.5 + 0.5 * turbulence(vec3(0.5, 10., 40.) * pos + 2. * sin(pos + t * 0.5))
+                      + 0.25 * turbulence(vec3(40., 40., 0.5) * pos + 2. * sin(pos + t * 0.5));
+   float wave = sin(10. * pos.y + t) * 0.3 + sin(10. * pos.x + t) * 0.2;
+
+   vec3 base = mix(vec3(0.1, 0.2, 0.7), vec3(0.2, 0.6, 0.9), band);
+   vec3 highlight = vec3(0.7, 0.95, 1.0);
+
+   float waveDip = abs(wave);
+   vec3 c = mix(base, highlight, waveDip * 0.2);
+
+   c *= 0.4 + 0.6 * pow(abs(sin(10. * pos.y + t)), 0.4);
+
+   return c;
+}
+
+void main() {
+   vec4 F = vec4(0.);
+   float x = 1. * vPos.x;
+   float y = 2. * vPos.y;
+   // float rr = x*x + y*y;
+   float rr = x*x*y*y;
+   vec3 ambient = vec3(.12);
+   vec3 diffuse = vec3(.98);
+
+   if (rr < 1.) {
+      float z = sqrt(1. - rr);
+      vec3 N = vec3(x,y,z);
+      vec3 c = ambient + diffuse * 0.7;
+
+      F = vec4(c * water(vPos),1.);
+   }
+   fragColor = vec4(sqrt(F.rgb), F.a);
+}`;
+
+let startTime = Date.now()/1000;
+
+this.update = viewPoint => {
+   let time = Date.now()/1000 - startTime;
+   setUniform('1f', 'uTime', time);
+   setUniform('3fv', 'uViewPoint', viewPoint);
+}
+
+}
+
+gl_start(canvas, new Scene());
+</script>
+
+</body>
+</html>
