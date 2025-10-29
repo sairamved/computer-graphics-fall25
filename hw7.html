@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Springs</title>
+</head>
+<body bgcolor=white>
+<center><canvas id=canvas width=800 height=800></canvas>
+<script src=webgl.js></script>
+<script>
+
+function Scene() {
+
+let ball = Shape.sphereMesh(20,10);
+let tube = Shape.tubeMesh(20);
+let cube = Shape.cubeMesh(20);
+this.vertexShader = Shader.defaultVertexShader;
+this.fragmentShader = Shader.defaultFragmentShader;
+
+autodraw = false;
+
+let M = new Matrix();
+
+let spring = new Spring();
+let force = 0, bend = 0;
+mouse.drag = (x,y) => bend -= x/15;
+mouse.up = () => force = bend;
+
+let draw = (mesh, matrix, color) => {
+   let m = mxm(perspective(0,0,1),matrix??M.get());
+   setUniform('Matrix4fv', 'uMF', false, m);
+   setUniform('Matrix4fv', 'uMI', false, inverse(m));
+   setUniform('3fv', 'uColor', color ?? [1,1,1]);
+   drawMesh(mesh);
+   return this;
+}
+
+this.update = () => {
+   if (! mouse.isDown) {
+      spring.setForce(force *= .9);
+      spring.update(.1);
+      bend = spring.getPosition();
+   }
+
+   let K = 550;
+   let N = 8, r = .01, l = .02;
+   let baseR = 0.1;
+
+   let c = [0.3,0.3,0.3];
+   let handleR = 0.1, handleL = 0.5;
+   let bunch = 0.65;
+   let down = [0,-1,0];
+
+   draw(tube, mxm(M.get(),
+              mxm(turnX(Math.PI/2),
+                  scale(handleR, handleR, handleL))), c);
+   
+   M.push()
+      .move(0, -handleL, 0);
+      draw(ball, mxm(M.get(), scale(0.1)), c);
+   M.pop();
+
+   for (let k = 0 ; k < K ; k++) {
+      let a = k / K;
+      let y = 1 - 2 * a;
+      let rad = Math.sqrt(Math.max(0, 1 - y*y));
+      let x = Math.cos(k) * rad;
+      let z = Math.sin(k) * rad;
+      let dir = normalize(mix([x, y, z], down, bunch));
+
+      M.push()
+       .move(0, handleL/2, 0);
+
+
+      M.push()
+       .aim(dir)
+       .turnX(-Math.PI/2)
+       .move(0, baseR, 0);
+
+      for (let n = 0 ; n < N ; n++) {
+         M.push().move(0, 2*l, 0).turnZ(-bend/2).turnX(bunch * (n+1)/N * .15);
+         if (n < N - 1) {
+            draw(ball, mxm(M.get(), scale(r)), c);
+            draw(tube, mxm(M.get(),
+                       mxm(move(0, l, 0),
+                       mxm(turnX(Math.PI/2),
+                           scale(r, r, l)))), c);
+         } else {
+            draw(ball, mxm(M.get(), scale(r)), c);
+            draw(tube, mxm(M.get(),
+                       mxm(move(0, l/2, 0),
+                       mxm(turnX(Math.PI/2),
+                           scale(r, r, l/2)))), c);
+            draw(ball, mxm(M.get(),
+                       mxm(move(0, l, 0),
+                           scale(r))), c);
+         }
+      }
+
+      for (let n = 0 ; n < N ; n++)
+         M.pop();
+      M.pop();
+      M.pop();
+   }
+
+}
+
+}
+
+gl_start(canvas, new Scene());
+</script>
+
+</body>
+</html>
+
