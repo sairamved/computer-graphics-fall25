@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Letters</title>
+</head>
+<body bgcolor='#d42d30'>
+<center><canvas id=canvas width=800 height=800></canvas>
+<script src=webgl.js></script>
+<script>
+
+function Scene() {
+
+   let createPathsMesh = (lineWidth, paths) => {
+      let vertices = [];
+      let addVertex = pos => vertices.push(pos,[0,0,1]);
+      for (let n = 0 ; n < paths.length ; n++) {
+         let path = paths[n];
+         for (let i = 0 ; i < path.length-1 ; i++) {
+            let b = path[i  ];
+            let c = path[i+1];
+            let a = i>0 ? path[i-1] : add(b,subtract(b,c));
+            let da = normalize(subtract(b, a));
+            let dc = normalize(subtract(c, b));
+            let db = normalize(add(da, dc));
+            let s = dot(da, db);
+            da = resize(da, lineWidth/2);
+            dc = resize(dc, lineWidth/2);
+            db = resize(db, lineWidth/2);
+            let ea = [-da[1]  , da[0]  , 0];
+            let ec = [-dc[1]  , dc[0]  , 0];
+            let eb = [-db[1]/s, db[0]/s, 0];
+            if (i == 0)
+               b = subtract(b, da);
+            if (dot(da, dc) < 0) {
+               if (n > 0 && i == 0)
+                  addVertex(subtract(b, ea));
+               addVertex(subtract(b, ea));
+               addVertex(add(b, ea));
+               addVertex(subtract(b, ec));
+               addVertex(add(b, ec));
+            }
+            else {
+               if (n > 0 && i == 0)
+                  addVertex(subtract(b, eb));
+               addVertex(subtract(b, eb));
+               addVertex(add(b, eb));
+            }
+            if (i == path.length-2) {
+               addVertex(subtract(add(c, dc), ec));
+               addVertex(add(add(c, dc), ec));
+            }
+            if (n < paths.length-1 && i == path.length-2)
+               addVertex(add(add(c, dc), ec));
+         }
+      }
+      return {
+         triangle_strip: true,
+	 data: new Float32Array(vertices.flat())
+      }
+   }
+
+   let createLetterMesh = (char) => {
+      let myPaths = [];
+      let charCode = char.charCodeAt(0) & 127;
+      if (charCode > 32) {
+         let paths = linefont[charCode - 32].paths;
+         for (let i = 0 ; i < paths.length ; i++) {
+            let myPath = [];
+            let path = paths[i];
+            for (let j = 0 ; j < path.length ; j++) {
+               let p = path[j];  
+               myPath.push([p[0] / 2000, -p[1] / 2000, 0]);
+            }
+            myPaths.push(myPath);
+         }
+      }
+      return createPathsMesh(.009, myPaths);
+   }
+
+   let text = 'worms';
+   let letterMeshes = [];
+   for (let i = 0; i < text.length; i++) {
+      letterMeshes.push(createLetterMesh(text[i]));
+   }
+
+   this.vertexShader = Shader.defaultVertexShader;
+   this.fragmentShader = Shader.defaultFragmentShader;
+
+   autodraw = false;
+
+   let M = new Matrix();
+
+   let draw = (mesh, color) => {
+      let m = mxm(perspective(0,0,-.5), M.get());
+      setUniform('Matrix4fv', 'uMF', false, m);
+      setUniform('Matrix4fv', 'uMI', false, inverse(m));
+      setUniform('3fv', 'uColor', color ?? [240/255, 146/255, 83/255]);
+      drawMesh(mesh);
+      return this;
+   }
+
+   let numWorms = 10;
+   let chainLength = text.length;
+   let worms = [];
+   
+   for (let w = 0; w < numWorms; w++) {
+      worms.push({
+         positions: Array(chainLength).fill().map(() => [0, 0, 0]),
+         t: Math.random() * 1000
+      });
+   }
+
+   this.update = () => {
+      let time = Date.now() / 1000;
+      
+      M.identity();
+      M.scale(1);
+      
+      for (let w = 0; w < worms.length; w++) {
+         let worm = worms[w];
+         let t = time + worm.t;
+         
+         let headX = Math.sin(t * 0.7) * 0.4;
+         let headY = Math.cos(t * 0.5) * 0.4;
+         let headZ = Math.sin(t * 0.3) * 0.2;
+         
+         let target = [headX, headY, headZ];
+         
+         for (let i = 0; i < chainLength; i++) {
+            let letterSpacing = 0.05;
+            
+            let dx = target[0] - worm.positions[i][0];
+            let dy = target[1] - worm.positions[i][1];
+            let dz = target[2] - worm.positions[i][2];
+            let dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            
+            if (dist > 0) {
+               worm.positions[i][0] = target[0] - (dx/dist) * letterSpacing;
+               worm.positions[i][1] = target[1] - (dy/dist) * letterSpacing;
+               worm.positions[i][2] = target[2] - (dz/dist) * letterSpacing;
+            }
+            
+            target = worm.positions[i];
+            
+            M.push();
+            M.move(worm.positions[i][0], worm.positions[i][1], worm.positions[i][2]);
+            
+            if (dist > 0.001) {
+               let angle = Math.atan2(dx, dz);
+               M.turnY(angle);
+            }
+            
+            let letterIndex = i % letterMeshes.length;
+            draw(letterMeshes[letterIndex]);
+            M.pop();
+         }
+      }
+   }
+}
+
+gl_start(canvas, new Scene());
+</script>
+
+</body>
+</html>
