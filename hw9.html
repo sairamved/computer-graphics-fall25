@@ -1,0 +1,112 @@
+<html>
+<head>
+   <title>Implicit Surfaces</title>
+</head>
+<body bgcolor=grey>
+<center><canvas id=canvas width=800 height=800></canvas>
+<script src=webgl.js></script>
+<script src=implicit.js></script>
+<script>
+
+function Scene(){
+
+   let numBlobsPerRing = 10;
+   let totalBlobs = numBlobsPerRing * 2;
+   let outerRadius = 0.3;
+   let ringOffset = 0.5;
+
+   let P = (i, ringIndex) => {
+      let angle = 2 * Math.PI * i / numBlobsPerRing;
+      let xOffset = ringIndex === 0 ? -ringOffset/2 : ringOffset/2;
+      return [outerRadius * Math.cos(angle) + xOffset, outerRadius * Math.sin(angle), 0];
+   };
+
+   let blobs = new Blobs();
+   for (let i = 0 ; i < numBlobsPerRing ; i++)
+      blobs.addBlob(blobs.SPHERE,
+                    mxm(move(P(i, 0)),
+                    scale(.15,.15,.15)), 1);
+   for (let i = 0 ; i < numBlobsPerRing ; i++)
+      blobs.addBlob(blobs.SPHERE,
+                    mxm(move(P(i, 1)),
+                    scale(.15,.15,.15)), 1);
+   let mesh = { data: implicitSurfaceTriangleMesh(blobs, 150) };
+
+   let mat = [];
+   for (let n = 0 ; n < blobs.nBlobs() ; n++)
+      mat.push(identity());
+
+   this.vertexShader=`#version 300 es
+      uniform mat4 uMF, uMI, uMat[20];
+      in  vec3 aPos, aNor, aWts0, aWts1;
+      out vec3 vPos, vNor;
+      void main() {
+         vec4 p = uMF * vec4(aPos, 1.);
+         vec4 pos = vec4(0.);
+         for (int i = 0 ; i < 20 ; i++) {
+            if (i == int(aWts0.x)) pos += mod(aWts0.x, 1.) * (uMat[i] * p);
+            if (i == int(aWts0.y)) pos += mod(aWts0.y, 1.) * (uMat[i] * p);
+            if (i == int(aWts0.z)) pos += mod(aWts0.z, 1.) * (uMat[i] * p);
+            if (i == int(aWts1.x)) pos += mod(aWts1.x, 1.) * (uMat[i] * p);
+            if (i == int(aWts1.y)) pos += mod(aWts1.y, 1.) * (uMat[i] * p);
+            if (i == int(aWts1.z)) pos += mod(aWts1.z, 1.) * (uMat[i] * p);
+         }
+         vec4 nor = vec4(aNor, 0.) * uMI;
+         gl_Position = pos * vec4(1.,1.,-.1,1.);
+         vPos = pos.xyz;
+         vNor = nor.xyz;
+      }
+   `,
+
+   this.fragmentShader = Shader.defaultFragmentShader;
+
+   this.update = () => {
+      let time = Date.now() / 1000;
+
+      let mat = [];
+      let innerRadius = 0.05;
+      
+      for (let i = 0 ; i < numBlobsPerRing ; i++) {
+         let angle = 2 * Math.PI * i / numBlobsPerRing;
+         let phase = 2 * time + i * Math.PI / 3.0;
+         
+         let xOffset = -ringOffset/2;
+         let cx = outerRadius * Math.cos(angle) + xOffset;
+         let cy = outerRadius * Math.sin(angle);
+         let x = cx + innerRadius * Math.cos(phase);
+         let y = cy + innerRadius * Math.sin(phase);
+         let z = 0;
+         
+         let basePos = P(i, 0);
+         let newPos = [x, y, z];
+         
+         mat.push(mxm(move(newPos), move(resize(basePos, -1))));
+      }
+      for (let i = 0 ; i < numBlobsPerRing ; i++) {
+         let angle = 2 * Math.PI * i / numBlobsPerRing;
+         let phase = -2 * time + i * Math.PI / 2.0;
+         
+         let xOffset = ringOffset/2;
+         let cx = outerRadius * Math.cos(angle) + xOffset;
+         let cy = outerRadius * Math.sin(angle);
+         let x = cx + innerRadius * Math.cos(phase);
+         let y = cy + innerRadius * Math.sin(phase);
+         let z = 0;
+         
+         let basePos = P(i, 1);
+         let newPos = [x, y, z];
+         
+         mat.push(mxm(move(newPos), move(resize(basePos, -1))));
+      }
+      
+      setUniform('Matrix4fv', 'uMat', false, mat.flat());
+      vertexMap(['aPos',3,'aNor',3,'aWts0',3,'aWts1',3]);
+      drawObj(mesh, identity());
+   }
+}
+
+gl_start(canvas, new Scene());
+</script>
+
+</body>
+</html>
